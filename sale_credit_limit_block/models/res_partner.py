@@ -14,6 +14,6 @@ class ResPartner(models.Model):
             ('invoice_date_due', '<', fields.Date.today()),
             ('partner_id', '=', self.id),
         ]
-        overdue_invoices = self.env['account.move'].search(overdue_invoice_domain)
+        overdue_invoices = self.env['account.move'].sudo().search(overdue_invoice_domain)
         overdue_amount = sum(overdue_invoices.mapped('amount_residual'))
         return overdue_amount
