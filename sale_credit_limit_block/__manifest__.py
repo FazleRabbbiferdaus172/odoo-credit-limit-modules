@@ -13,9 +13,11 @@
     'category': 'Sales Management',
     'version': '18.0.1.0.0',
 
-    'depends': ['base'],
+    'depends': ['sale_management', 'contacts'],
 
     'data': [
         # 'security/ir.model.access.csv',
     ],
+    'installable': True,
+    'license': 'LGPL-3',
 }

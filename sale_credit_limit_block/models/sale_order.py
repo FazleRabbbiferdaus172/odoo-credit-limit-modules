@@ -9,7 +9,7 @@ class SaleOrder(models.Model):
 
     @staticmethod
     def calculate_new_overdue(partner, order_amount):
-        current_overdue = 0
+        current_overdue = partner._get_overdue_amount()
         return current_overdue + order_amount
 
     def action_confirm(self):
