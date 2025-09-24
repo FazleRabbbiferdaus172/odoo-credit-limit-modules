@@ -120,3 +120,96 @@ class TestSaleCreditLimitBlock(TestSaleCommon):
         self.assertEqual(invoice.state, "posted")
         amount_overdue = self.partner_a._get_overdue_amount()
         self.assertEqual(amount_overdue, 1000)
+
+    def test_amount_overdue_ignores_draft_invoices(self):
+        invoice = self.env['account.move'].create({
+            'partner_id': self.partner_a.id,
+            'move_type': 'out_invoice',
+            'invoice_date': Date.today() - timedelta(days=2),
+            'invoice_date_due': Date.today() - timedelta(days=1),
+            'invoice_line_ids': [Command.create({
+                'product_id': self.company_data['product_order_no'].id,
+                'quantity': 1,
+                'price_unit': 1000,
+            })],
+        })
+        self.assertEqual(invoice.state, "draft")
+        amount_overdue = self.partner_a._get_overdue_amount()
+        self.assertEqual(amount_overdue, 0)
+
+    def test_amount_overdue_ignores_canceled_invoices(self):
+        invoice = self.env['account.move'].create({
+            'partner_id': self.partner_a.id,
+            'move_type': 'out_invoice',
+            'invoice_date': Date.today() - timedelta(days=2),
+            'invoice_date_due': Date.today() - timedelta(days=1),
+            'invoice_line_ids': [Command.create({
+                'product_id': self.company_data['product_order_no'].id,
+                'quantity': 1,
+                'price_unit': 1000,
+            })],
+        })
+        invoice.button_cancel()
+        self.assertEqual(invoice.state, "cancel")
+        amount_overdue = self.partner_a._get_overdue_amount()
+        self.assertEqual(amount_overdue, 0)
+
+    def test_amount_overdue_includes_not_paid_and_partial_paid_invoices(self):
+        def register_payment_and_assert_state(move, amount):
+            self.env['account.payment.register'].with_context(
+                active_model='account.move',
+                active_ids=move.ids
+            ).create({'amount': amount})._create_payments()
+
+        invoice_paid = self.env['account.move'].create({
+            'partner_id': self.partner_a.id,
+            'move_type': 'out_invoice',
+            'invoice_date': Date.today() - timedelta(days=2),
+            'invoice_date_due': Date.today() - timedelta(days=1),
+            'invoice_line_ids': [Command.create({
+                'product_id': self.company_data['product_order_no'].id,
+                'quantity': 1,
+                'price_unit': 1000,
+            })],
+        })
+
+        invoice_paid.action_post()
+        register_payment_and_assert_state(invoice_paid, 1000.0)
+        self.assertEqual(invoice_paid.payment_state, "paid")
+        amount_overdue = self.partner_a._get_overdue_amount()
+        self.assertEqual(amount_overdue, 0)
+
+        invoice_partially_paid = self.env['account.move'].create({
+            'partner_id': self.partner_a.id,
+            'move_type': 'out_invoice',
+            'invoice_date': Date.today() - timedelta(days=2),
+            'invoice_date_due': Date.today() - timedelta(days=1),
+            'invoice_line_ids': [Command.create({
+                'product_id': self.company_data['product_order_no'].id,
+                'quantity': 1,
+                'price_unit': 1000,
+            })],
+        })
+
+        invoice_partially_paid.action_post()
+        register_payment_and_assert_state(invoice_partially_paid, 500.0)
+        self.assertEqual(invoice_partially_paid.payment_state, "partial")
+        amount_overdue = self.partner_a._get_overdue_amount()
+        self.assertEqual(amount_overdue, 500)
+
+        invoice_not_paid = self.env['account.move'].create({
+            'partner_id': self.partner_a.id,
+            'move_type': 'out_invoice',
+            'invoice_date': Date.today() - timedelta(days=2),
+            'invoice_date_due': Date.today() - timedelta(days=1),
+            'invoice_line_ids': [Command.create({
+                'product_id': self.company_data['product_order_no'].id,
+                'quantity': 1,
+                'price_unit': 500,
+            })],
+        })
+
+        invoice_not_paid.action_post()
+        self.assertEqual(invoice_not_paid.payment_state, "not_paid")
+        amount_overdue = self.partner_a._get_overdue_amount()
+        self.assertEqual(amount_overdue, 1000)
