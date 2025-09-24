@@ -1,6 +1,7 @@
 # -*- coding: utf-8 -*-
 
 from odoo.fields import Command
+from odoo.exceptions import ValidationError
 from odoo.addons.sale.tests.common import TestSaleCommon
 
 
@@ -79,5 +80,7 @@ class TestSaleCreditLimitBlock(TestSaleCommon):
         sale_order = self.env['sale.order'].create(
             sale_order_values
         )
-        sale_order.action_confirm()
-        self.assertNotEqual(sale_order.state, "sale")
+
+        with self.assertRaises(ValidationError):
+            sale_order.action_confirm()
+            self.assertNotEqual(sale_order.state, "sale")
