@@ -62,96 +62,76 @@ class TestSaleCreditLimitBlock(TestSaleCommon):
         }
         sale_order = self.env['sale.order'].create(
             sale_order_values
+    def _create_sale_order(self, user, price_unit):
+        sale_order = self.env['sale.order'].with_user(user).create(
+            {
+                'partner_id': self.partner_a.id,
+                'partner_invoice_id': self.partner_a.id,
+                'partner_shipping_id': self.partner_a.id,
+                'pricelist_id': self.company_data['default_pricelist'].id,
+                'order_line': [Command.create({
+                    'product_id': self.company_data['product_order_no'].id,
+                    'price_unit': price_unit,
+                })]
+            }
         )
-        sale_order.action_confirm()
+        return sale_order
+
+    def _create_invoice(self, price_unit, invoice_date_days=0, due_date_days=0):
+        invoice = self.env['account.move'].create({
+            'partner_id': self.partner_a.id,
+            'move_type': 'out_invoice',
+            'invoice_date': Date.today() + timedelta(days=invoice_date_days),
+            'invoice_date_due': Date.today() + timedelta(days=due_date_days),
+            'invoice_line_ids': [Command.create({
+                'product_id': self.company_data['product_order_no'].id,
+                'quantity': 1,
+                'price_unit': price_unit,
+            })],
+        })
+        return invoice
+
+    def test_confirm_sale_order_below_limit(self):
+        self.env.company.account_use_credit_limit = True
+        self.partner_a.credit_limit = 1000.0
+        sale_order = self._create_sale_order(self.sales_user, 1000)
+        sale_order.with_user(self.sales_user).action_confirm()
         self.assertEqual(sale_order.state, "sale")
 
     def test_block_sale_order_exceeding_limit(self):
         self.env.company.account_use_credit_limit = True
         self.partner_a.credit_limit = 1000.0
-        sale_order_values = {
-            'partner_id': self.partner_a.id,
-            'partner_invoice_id': self.partner_a.id,
-            'partner_shipping_id': self.partner_a.id,
-            'pricelist_id': self.company_data['default_pricelist'].id,
-            'order_line': [Command.create({
-                'product_id': self.company_data['product_order_no'].id,
-                'price_unit': 1001.0,
-            })]
-        }
-        sale_order = self.env['sale.order'].create(
-            sale_order_values
-        )
+        sale_order = self._create_sale_order(self.sales_user, 1001)
 
         with self.assertRaises(ValidationError):
-            sale_order.action_confirm()
+            sale_order.with_user(self.sales_user).action_confirm()
             self.assertNotEqual(sale_order.state, "sale")
 
     def test_amount_overdue_ignores_invoices_that_do_not_pass_due_date_from_payment_term(self):
-        invoice = self.env['account.move'].create({
-            'partner_id': self.partner_a.id,
-            'move_type': 'out_invoice',
-            'invoice_date': Date.today(),
-            'invoice_date_due': Date.today() + timedelta(days=365),
-            'invoice_line_ids': [Command.create({
-                'product_id': self.company_data['product_order_no'].id,
-                'quantity': 1,
-                'price_unit': 1000,
-            })],
-        })
+        invoice = self._create_invoice(1000, 0, 365)
         invoice.action_post()
         self.assertEqual(invoice.state, "posted")
-        amount_overdue = self.partner_a._get_overdue_amount()
+        amount_overdue = self.partner_a.get_overdue_amount()
         self.assertEqual(amount_overdue, 0)
 
     def test_amount_overdue_includes_invoices_that_pass_due_date_from_payment_term(self):
-        invoice = self.env['account.move'].create({
-            'partner_id': self.partner_a.id,
-            'move_type': 'out_invoice',
-            'invoice_date': Date.today() - timedelta(days=2),
-            'invoice_date_due': Date.today() - timedelta(days=1),
-            'invoice_line_ids': [Command.create({
-                'product_id': self.company_data['product_order_no'].id,
-                'quantity': 1,
-                'price_unit': 1000,
-            })],
-        })
+        invoice = self._create_invoice(1000, -2, -1)
         invoice.action_post()
         self.assertEqual(invoice.state, "posted")
-        amount_overdue = self.partner_a._get_overdue_amount()
+        amount_overdue = self.partner_a.get_overdue_amount()
         self.assertEqual(amount_overdue, 1000)
 
     def test_amount_overdue_ignores_draft_invoices(self):
-        invoice = self.env['account.move'].create({
-            'partner_id': self.partner_a.id,
-            'move_type': 'out_invoice',
-            'invoice_date': Date.today() - timedelta(days=2),
-            'invoice_date_due': Date.today() - timedelta(days=1),
-            'invoice_line_ids': [Command.create({
-                'product_id': self.company_data['product_order_no'].id,
-                'quantity': 1,
-                'price_unit': 1000,
-            })],
-        })
+        invoice = self._create_invoice(1000, -2, -1)
         self.assertEqual(invoice.state, "draft")
-        amount_overdue = self.partner_a._get_overdue_amount()
+        amount_overdue = self.partner_a.get_overdue_amount()
         self.assertEqual(amount_overdue, 0)
 
     def test_amount_overdue_ignores_canceled_invoices(self):
-        invoice = self.env['account.move'].create({
-            'partner_id': self.partner_a.id,
-            'move_type': 'out_invoice',
-            'invoice_date': Date.today() - timedelta(days=2),
-            'invoice_date_due': Date.today() - timedelta(days=1),
-            'invoice_line_ids': [Command.create({
-                'product_id': self.company_data['product_order_no'].id,
-                'quantity': 1,
-                'price_unit': 1000,
-            })],
-        })
+        invoice = self._create_invoice(1000, -2, -1)
         invoice.button_cancel()
         self.assertEqual(invoice.state, "cancel")
-        amount_overdue = self.partner_a._get_overdue_amount()
+        amount_overdue = self.partner_a.get_overdue_amount()
         self.assertEqual(amount_overdue, 0)
 
     def test_amount_overdue_includes_not_paid_and_partial_paid_invoices(self):
@@ -161,55 +141,25 @@ class TestSaleCreditLimitBlock(TestSaleCommon):
                 active_ids=move.ids
             ).create({'amount': amount})._create_payments()
 
-        invoice_paid = self.env['account.move'].create({
-            'partner_id': self.partner_a.id,
-            'move_type': 'out_invoice',
-            'invoice_date': Date.today() - timedelta(days=2),
-            'invoice_date_due': Date.today() - timedelta(days=1),
-            'invoice_line_ids': [Command.create({
-                'product_id': self.company_data['product_order_no'].id,
-                'quantity': 1,
-                'price_unit': 1000,
-            })],
-        })
+        invoice_paid = self._create_invoice(1000, -2, -1)
 
         invoice_paid.action_post()
         register_payment_and_assert_state(invoice_paid, 1000.0)
         self.assertEqual(invoice_paid.payment_state, "paid")
-        amount_overdue = self.partner_a._get_overdue_amount()
+        amount_overdue = self.partner_a.get_overdue_amount()
         self.assertEqual(amount_overdue, 0)
 
-        invoice_partially_paid = self.env['account.move'].create({
-            'partner_id': self.partner_a.id,
-            'move_type': 'out_invoice',
-            'invoice_date': Date.today() - timedelta(days=2),
-            'invoice_date_due': Date.today() - timedelta(days=1),
-            'invoice_line_ids': [Command.create({
-                'product_id': self.company_data['product_order_no'].id,
-                'quantity': 1,
-                'price_unit': 1000,
-            })],
-        })
+        invoice_partially_paid = self._create_invoice(1000, -2, -1)
 
         invoice_partially_paid.action_post()
         register_payment_and_assert_state(invoice_partially_paid, 500.0)
         self.assertEqual(invoice_partially_paid.payment_state, "partial")
-        amount_overdue = self.partner_a._get_overdue_amount()
+        amount_overdue = self.partner_a.get_overdue_amount()
         self.assertEqual(amount_overdue, 500)
 
-        invoice_not_paid = self.env['account.move'].create({
-            'partner_id': self.partner_a.id,
-            'move_type': 'out_invoice',
-            'invoice_date': Date.today() - timedelta(days=2),
-            'invoice_date_due': Date.today() - timedelta(days=1),
-            'invoice_line_ids': [Command.create({
-                'product_id': self.company_data['product_order_no'].id,
-                'quantity': 1,
-                'price_unit': 500,
-            })],
-        })
+        invoice_not_paid = self._create_invoice(500, -2, -1)
 
         invoice_not_paid.action_post()
         self.assertEqual(invoice_not_paid.payment_state, "not_paid")
-        amount_overdue = self.partner_a._get_overdue_amount()
+        amount_overdue = self.partner_a.get_overdue_amount()
         self.assertEqual(amount_overdue, 1000)
