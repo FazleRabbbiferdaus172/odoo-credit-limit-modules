@@ -1,6 +1,8 @@
 # -*- coding: utf-8 -*-
 
-from odoo.fields import Command
+from datetime import timedelta
+
+from odoo.fields import Command, Date
 from odoo.exceptions import ValidationError
 from odoo.addons.sale.tests.common import TestSaleCommon
 
@@ -84,3 +86,37 @@ class TestSaleCreditLimitBlock(TestSaleCommon):
         with self.assertRaises(ValidationError):
             sale_order.action_confirm()
             self.assertNotEqual(sale_order.state, "sale")
+
+    def test_amount_overdue_ignores_invoices_that_do_not_pass_due_date_from_payment_term(self):
+        invoice = self.env['account.move'].create({
+            'partner_id': self.partner_a.id,
+            'move_type': 'out_invoice',
+            'invoice_date': Date.today(),
+            'invoice_date_due': Date.today() + timedelta(days=365),
+            'invoice_line_ids': [Command.create({
+                'product_id': self.company_data['product_order_no'].id,
+                'quantity': 1,
+                'price_unit': 1000,
+            })],
+        })
+        invoice.action_post()
+        self.assertEqual(invoice.state, "posted")
+        amount_overdue = self.partner_a._get_overdue_amount()
+        self.assertEqual(amount_overdue, 0)
+
+    def test_amount_overdue_includes_invoices_that_pass_due_date_from_payment_term(self):
+        invoice = self.env['account.move'].create({
+            'partner_id': self.partner_a.id,
+            'move_type': 'out_invoice',
+            'invoice_date': Date.today() - timedelta(days=2),
+            'invoice_date_due': Date.today() - timedelta(days=1),
+            'invoice_line_ids': [Command.create({
+                'product_id': self.company_data['product_order_no'].id,
+                'quantity': 1,
+                'price_unit': 1000,
+            })],
+        })
+        invoice.action_post()
+        self.assertEqual(invoice.state, "posted")
+        amount_overdue = self.partner_a._get_overdue_amount()
+        self.assertEqual(amount_overdue, 1000)
