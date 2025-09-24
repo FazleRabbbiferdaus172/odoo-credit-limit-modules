@@ -16,8 +16,9 @@
     'depends': ['sale_management', 'contacts'],
 
     'data': [
-        # 'security/ir.model.access.csv',
         'security/sale_credit_limit_security.xml',
+        'security/ir.model.access.csv',
+        "wizard/sale_credit_limit_override_wizard_views.xml",
     ],
     'installable': True,
     'license': 'LGPL-3',

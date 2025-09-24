@@ -1,0 +1,22 @@
+<?xml version="1.0" encoding="utf-8"?>
+<odoo>
+    <record id="view_sale_credit_override_wizard_form" model="ir.ui.view">
+        <field name="name">sale.credit.limit.override.wizard.form</field>
+        <field name="model">sale.credit.limit.override.wizard</field>
+        <field name="arch" type="xml">
+            <form string="Sale Order Confirmation">
+                <field name="sale_order_id" invisible="1"/>
+                <div class="alert alert-warning" role="alert">
+                    <field name="message" nolabel="1" readonly="1"/>
+                    <h3>As an authorized person, you have the authority to override this block.
+                        Do you wish to confirm this sale order?</h3>
+                </div>
+                <footer>
+                    <button name="action_confirm_override" string="Confirm Sale Order" type="object" class="btn-primary" data-hotkey="q"/>
+                    <button string="Cancel" class="btn-secondary" special="cancel" data-hotkey="z"/>
+                </footer>
+            </form>
+        </field>
+    </record>
+</odoo>
+
