@@ -1,15 +1,17 @@
 # -*- coding: utf-8 -*-
-
+"""Sale Model for Custom Credit Limit."""
 from odoo import models, _
 from odoo.exceptions import ValidationError
 
 
 class SaleOrder(models.Model):
+    """Inherit Sale Order to add credit limit validation."""
     _inherit = 'sale.order'
 
     @staticmethod
     def calculate_new_overdue(partner, order_amount):
-        current_overdue = partner._get_overdue_amount()
+        """Calculate new overdue amount."""
+        current_overdue = partner.get_overdue_amount()
         return current_overdue + order_amount
 
     def _launch_credit_override_wizard(self, message):

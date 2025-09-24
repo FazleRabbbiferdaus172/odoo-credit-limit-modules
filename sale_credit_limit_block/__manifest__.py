@@ -1,4 +1,5 @@
 # -*- coding: utf-8 -*-
+# License LGPL-3 or later
 {
     'name': "Sale Credit Limit Block",
 
@@ -10,7 +11,7 @@
 
     'author': "Fazle Rabbi Ferdaus",
 
-    'category': 'Sales Management',
+    'category': 'Sales/Sales',
     'version': '18.0.1.0.0',
 
     'depends': ['sale_management', 'contacts'],

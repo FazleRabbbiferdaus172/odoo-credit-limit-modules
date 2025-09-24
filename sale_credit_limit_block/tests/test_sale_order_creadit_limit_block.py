@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-
+# License LGPL-3 or later
 from datetime import timedelta
 
 from odoo.fields import Command, Date
