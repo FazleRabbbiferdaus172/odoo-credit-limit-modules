@@ -47,21 +47,13 @@ class TestSaleCreditLimitBlock(TestSaleCommon):
             'partner_id': cls.partner_a.id,
         })
 
-    def test_confirm_sale_order_below_limit(self):
-        self.env.company.account_use_credit_limit = True
-        self.partner_a.credit_limit = 1000.0
-        sale_order_values = {
-            'partner_id': self.partner_a.id,
-            'partner_invoice_id': self.partner_a.id,
-            'partner_shipping_id': self.partner_a.id,
-            'pricelist_id': self.company_data['default_pricelist'].id,
-            'order_line': [Command.create({
-                'product_id': self.company_data['product_order_no'].id,
-                'price_unit': 1000.0,
-            })]
-        }
-        sale_order = self.env['sale.order'].create(
-            sale_order_values
+        limit_override_group = cls.env.ref('sale_credit_limit_block.group_credit_limit_override')
+        cls.limit_override_user = cls.env['res.users'].create({
+            'name': 'Sales Manager',
+            'login': 'manager',
+            'groups_id': [(6, 0, [limit_override_group.id])]
+        })
+
     def _create_sale_order(self, user, price_unit):
         sale_order = self.env['sale.order'].with_user(user).create(
             {
@@ -163,3 +155,24 @@ class TestSaleCreditLimitBlock(TestSaleCommon):
         self.assertEqual(invoice_not_paid.payment_state, "not_paid")
         amount_overdue = self.partner_a.get_overdue_amount()
         self.assertEqual(amount_overdue, 1000)
+
+    def test_user_with_group_credit_limit_override_gets_wizard_on_exceed(self):
+        self.env.company.account_use_credit_limit = True
+        self.partner_a.credit_limit = 1000.0
+        sale_order = self._create_sale_order(self.limit_override_user, 1001)
+        action = sale_order.with_user(self.limit_override_user).action_confirm()
+
+        self.assertIsInstance(action, dict, "Manager should receive an action dictionary.")
+        self.assertEqual(action.get('type'), 'ir.actions.act_window')
+        self.assertEqual(action.get('res_model'), 'sale.credit.limit.override.wizard')
+        self.assertEqual(sale_order.state, 'draft')
+
+    def test_credit_limit_block_bypass(self):
+        self.env.company.account_use_credit_limit = True
+        self.partner_a.credit_limit = 1000.0
+        sale_order = self._create_sale_order(self.sales_user, 1001)
+        with self.assertRaises(ValidationError):
+            sale_order.action_confirm()
+            self.assertEqual(sale_order.state, 'draft')
+        sale_order.with_context(credit_limit_override_approved=True).action_confirm()
+        self.assertEqual(sale_order.state, 'sale')
