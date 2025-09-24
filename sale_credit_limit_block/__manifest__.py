@@ -17,6 +17,7 @@
 
     'data': [
         # 'security/ir.model.access.csv',
+        'security/sale_credit_limit_security.xml',
     ],
     'installable': True,
     'license': 'LGPL-3',
