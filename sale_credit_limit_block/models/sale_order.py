@@ -30,7 +30,7 @@ class SaleOrder(models.Model):
                             "Credit Limit: %s"
                         ) % (
                                       partner.name,
-                                      overdue_amount,
+                                      overdue_amount - order.amount_total,
                                       order.amount_total,
                                       overdue_amount,
                                       partner.credit_limit
